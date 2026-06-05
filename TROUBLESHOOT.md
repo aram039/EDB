@@ -47,6 +47,7 @@ Running on **Vagrant VMs** on a local laptop.
 - SSH config file at `~/.ssh/config` or use `ssh -F ssh_config` syntax
 - Admin access to laptop/VMs
 - Knowledge of basic PostgreSQL commands and `systemctl`
+- EDB PG Enterprise 17 installed (version may vary)
 
 ---
 
@@ -71,13 +72,13 @@ Running on **Vagrant VMs** on a local laptop.
 Terminate non-critical connections to allow a clean shutdown:
 
 ```bash
-ssh -F ssh_config db-1 "psql -U postgres -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname NOT IN ('postgres', 'template0', 'template1') AND pid <> pg_backend_pid();\""
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname NOT IN ('\"'\"'postgres'\"'\"', '\"'\"'template0'\"'\"', '\"'\"'template1'\"'\"') AND pid <> pg_backend_pid();'\""
 ```
 
 Verify replication is healthy:
 
 ```bash
-ssh -F ssh_config db-1 "psql -U postgres -c \"SELECT * FROM pg_stat_replication;\""
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\""
 ```
 
 **Expected output**: One row per replica showing `state = streaming`, zero lag.
@@ -119,20 +120,20 @@ ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
 Stop the replica node first to cleanly disconnect from primary:
 
 ```bash
-ssh ec2-user@db-2 "sudo systemctl stop postgresql"
+ssh -F ssh_config db-2 "sudo systemctl stop edb-as-17"
 ```
 
 Wait 2 seconds, then stop the primary:
 
 ```bash
-ssh ec2-user@db-1 "sudo systemctl stop postgresql"
+ssh -F ssh_config db-1 "sudo systemctl stop edb-as-17"
 ```
 
 Verify both stopped:
 
 ```bash
-ssh ec2-user@db-1 "sudo systemctl status postgresql | head -n 3"
-ssh ec2-user@db-2 "sudo systemctl status postgresql | head -n 3"
+ssh -F ssh_config db-1 "sudo systemctl status edb-as-17 | head -n 3"
+ssh -F ssh_config db-2 "sudo systemctl status edb-as-17 | head -n 3"
 ```
 
 **Expected output**: `inactive (dead)` status.
@@ -202,9 +203,9 @@ ssh -F ssh_config barman "echo OK"
 Start the primary:
 
 ```bash
-ssh ec2-user@db-1 "sudo systemctl start postgresql"
+ssh -F ssh_config db-1 "sudo systemctl start edb-as-17"
 sleep 2
-ssh ec2-user@db-1 "sudo systemctl status postgresql | head -n 3"
+ssh -F ssh_config db-1 "sudo systemctl status edb-as-17 | head -n 3"
 ```
 
 ---
@@ -214,9 +215,9 @@ ssh ec2-user@db-1 "sudo systemctl status postgresql | head -n 3"
 Start the replica:
 
 ```bash
-ssh ec2-user@db-2 "sudo systemctl start postgresql"
+ssh -F ssh_config db-2 "sudo systemctl start edb-as-17"
 sleep 2
-ssh ec2-user@db-2 "sudo systemctl status postgresql | head -n 3"
+ssh -F ssh_config db-2 "sudo systemctl status edb-as-17 | head -n 3"
 ```
 
 ---
@@ -235,7 +236,7 @@ ssh -F ssh_config barman "sudo systemctl start barman"
 Check primary is writable:
 
 ```bash
-psql -h db-1 -U postgres -c "SELECT pg_is_in_recovery();"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT pg_is_in_recovery();'\""
 ```
 
 **Expected output**: `false`
@@ -243,7 +244,7 @@ psql -h db-1 -U postgres -c "SELECT pg_is_in_recovery();"
 Check replica is replaying:
 
 ```bash
-psql -h db-2 -U postgres -c "SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn();"
+ssh -F ssh_config db-2 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn();'\""
 ```
 
 **Expected output**: `true | <LSN_value>`
@@ -251,7 +252,7 @@ psql -h db-2 -U postgres -c "SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn(
 Check replication:
 
 ```bash
-psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\""
 ```
 
 **Expected output**: 1+ row(s) with `state = streaming`.
@@ -271,13 +272,13 @@ ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
 
 Use this before shutdown and after startup:
 
-- [ ] `pg_isready -h db-1 -p 5432` returns "accepting connections"
-- [ ] `pg_isready -h db-2 -p 5432` returns "accepting connections"
-- [ ] `psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"` shows 1+ row
-- [ ] `barman check db-1` shows no FAILED checks
-- [ ] `barman list-backup db-1 | head -n1` shows recent backup
-- [ ] `psql -h db-2 -U postgres -c "SELECT now() - pg_last_xact_replay_timestamp();"` shows < 1 second lag
-- [ ] No errors in Postgres logs: `tail -n 50 /var/lib/pgsql/data/log/postgresql-*.log | grep ERROR`
+- [ ] `ssh -F ssh_config db-1 "sudo /usr/lib/edb-pge/17/bin/pg_isready -p 5432"` returns "accepting connections"
+- [ ] `ssh -F ssh_config db-2 "sudo /usr/lib/edb-pge/17/bin/pg_isready -p 5432"` returns "accepting connections"
+- [ ] `ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\"" ` shows 1+ row
+- [ ] `ssh -F ssh_config barman "barman check db-1"` shows no FAILED checks
+- [ ] `ssh -F ssh_config barman "barman list-backup db-1 | head -n1"` shows recent backup
+- [ ] `ssh -F ssh_config db-2 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT now() - pg_last_xact_replay_timestamp();'\"" ` shows < 1 second lag
+- [ ] No errors in Postgres logs: `ssh -F ssh_config db-1 "sudo tail -n 50 /var/lib/edb-as-17/data/log/postgresql-*.log | grep ERROR"`
 
 ---
 
@@ -378,7 +379,7 @@ ls -la /var/lib/barman/db-1/base/
 
 Check Postgres logs for backup_label creation:
 ```bash
-ssh ec2-user@db-1 "sudo tail -n 50 /var/lib/pgsql/data/log/postgresql-*.log | grep -E 'pg_stop_backup|backup_label|ERROR'"
+ssh -F ssh_config db-1 "sudo tail -n 50 /var/lib/edb-as-17/data/log/postgresql-*.log | grep -E 'pg_stop_backup|backup_label|ERROR'"
 ```
 
 **How to fix**
@@ -403,7 +404,7 @@ ERROR: Replication slot 'backup_barman' already exists
 
 Check current slots:
 ```bash
-psql -h db-1 -U postgres -c "SELECT * FROM pg_replication_slots;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_replication_slots;'\""
 ```
 
 **Expected output** (table format):
@@ -421,14 +422,14 @@ grep "slot_name" /etc/barman.d/db-1.conf
 
 Option A — Recreate the slot:
 ```bash
-psql -h db-1 -U postgres -c "SELECT pg_drop_replication_slot('backup_barman');"
-barman check db-1  # will recreate the slot
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT pg_drop_replication_slot('\"'\"'backup_barman'\"'\"');'\""
+ssh -F ssh_config barman "barman check db-1"
 ```
 
 Option B — Use a different slot name:
 ```bash
 sudo bash -c 'echo "slot_name = backup_barman_new" >> /etc/barman.d/db-1.conf'
-barman check db-1
+ssh -F ssh_config barman "barman check db-1"
 ```
 
 ---
@@ -447,7 +448,7 @@ barman check db-1 output:
 
 Check Postgres archiver status:
 ```bash
-psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_archiver;'\""
 ```
 
 **Expected output** (table format):
@@ -458,7 +459,7 @@ psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver;"
 
 Check archive_command:
 ```bash
-psql -h db-1 -U postgres -c "SHOW archive_command;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SHOW archive_command;'\""
 ```
 
 Check barman can receive WALs:
@@ -468,14 +469,14 @@ ssh -F ssh_config barman "barman replication-status db-1"
 
 Test SSH connectivity:
 ```bash
-ssh -F ssh_config barman "ssh postgres@db-1 'psql -U streaming_barman -c \"SELECT 1;\"'"
+ssh -F ssh_config barman "ssh postgres@db-1 'sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -U streaming_barman -c \\\"SELECT 1;\\\"\"'"
 ```
 
 **How to fix**
 
 Ensure streaming_barman user has replication privileges:
 ```bash
-psql -h db-1 -U postgres -c "ALTER ROLE streaming_barman WITH REPLICATION;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'ALTER ROLE streaming_barman WITH REPLICATION;'\""
 ```
 
 Verify streaming_archiver is enabled in barman config:
@@ -486,13 +487,13 @@ grep "streaming_archiver" /etc/barman.d/db-1.conf
 
 Restart Postgres if needed:
 ```bash
-ssh ec2-user@db-1 "sudo systemctl restart postgresql"
+ssh -F ssh_config db-1 "sudo systemctl restart edb-as-17"
 ```
 
 Monitor archiving progress:
 ```bash
 sleep 10
-barman check db-1
+ssh -F ssh_config barman "barman check db-1"
 ```
 
 ---
@@ -522,18 +523,19 @@ ssh -F ssh_config barman "ps aux | grep 'pg_receivewal|barman-receive'"
 
 Use the `--wait` flag to let barman wait for all WALs:
 ```bash
-barman backup db-1 --wait
+ssh -F ssh_config barman "barman backup db-1 --wait"
 # waits indefinitely
 ```
 
 Or with timeout:
 ```bash
-barman backup db-1 --wait --wait-timeout 300  # 5 minutes
+ssh -F ssh_config barman "barman backup db-1 --wait --wait-timeout 300"
+# 5 minutes timeout
 ```
 
 If stuck, force WAL segment switch:
 ```bash
-barman switch-wal --force db-1
+ssh -F ssh_config barman "barman switch-wal --force db-1"
 ```
 
 ---
@@ -550,17 +552,17 @@ ERROR: The backup has failed copying files
 
 Test the SSH command barman uses:
 ```bash
-ssh -F ssh_config barman "ssh -q postgres@db-1 -p 22 'ls -la /var/lib/pgsql/data' | head -n 20"
+ssh -F ssh_config barman "ssh -q postgres@db-1 -p 22 'ls -la /var/lib/edb-as-17/data' | head -n 20"
 ```
 
 Test rsync directly:
 ```bash
-ssh -F ssh_config barman "rsync -avz postgres@db-1:/var/lib/pgsql/data/PG_VERSION /tmp/test"
+ssh -F ssh_config barman "rsync -avz postgres@db-1:/var/lib/edb-as-17/data/PG_VERSION /tmp/test"
 ```
 
 Check data directory permissions on db-1:
 ```bash
-ssh ec2-user@db-1 "ls -ld /var/lib/pgsql/data"
+ssh -F ssh_config db-1 "ls -ld /var/lib/edb-as-17/data"
 # should be: drwx------ postgres postgres
 ```
 
@@ -580,12 +582,12 @@ ssh -F ssh_config barman "ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa || true"
 
 2. Copy public key to db-1:
 ```bash
-ssh -F ssh_config barman "cat ~/.ssh/id_rsa.pub" | ssh ec2-user@db-1 "sudo tee -a /home/postgres/.ssh/authorized_keys > /dev/null"
+ssh -F ssh_config barman "cat ~/.ssh/id_rsa.pub" | ssh -F ssh_config db-1 "sudo tee -a /home/postgres/.ssh/authorized_keys > /dev/null"
 ```
 
 3. Fix permissions on db-1:
 ```bash
-ssh ec2-user@db-1 "sudo chown postgres:postgres /home/postgres/.ssh/authorized_keys && sudo chmod 600 /home/postgres/.ssh/authorized_keys"
+ssh -F ssh_config db-1 "sudo chown postgres:postgres /home/postgres/.ssh/authorized_keys && sudo chmod 600 /home/postgres/.ssh/authorized_keys"
 ```
 
 4. Verify:
@@ -596,7 +598,7 @@ ssh -F ssh_config barman "ssh -q postgres@db-1 'echo OK'"
 
 5. Retry backup:
 ```bash
-barman backup db-1
+ssh -F ssh_config barman "barman backup db-1"
 ```
 
 ---
@@ -699,28 +701,28 @@ barman cron
 **Morning (after startup):**
 ```bash
 # 1. Cluster health
-psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\""
 
 # 2. Barman status
-barman check db-1
+ssh -F ssh_config barman "barman check db-1"
 
 # 3. Last backup age (should be < 24h)
-barman list-backup db-1 | head -n1
+ssh -F ssh_config barman "barman list-backup db-1 | head -n1"
 
 # 4. Disk space
-df -h /var/lib/barman
+ssh -F ssh_config barman "df -h /var/lib/barman"
 ```
 
 **Evening (before shutdown):**
 ```bash
 # 1. Take final backup
-barman backup db-1 --wait
+ssh -F ssh_config barman "barman backup db-1 --wait"
 
 # 2. Verify it succeeded
-barman list-backup db-1 | head -n1
+ssh -F ssh_config barman "barman list-backup db-1 | head -n1"
 
 # 3. Check no archiver errors
-psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver WHERE failed_count > 0;"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_archiver WHERE failed_count > 0;'\""
 
 # 4. Shutdown sequence
 # (follow "Shutdown Procedure" section above)
@@ -734,27 +736,28 @@ psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver WHERE failed_count >
 
 **Connectivity**
 ```bash
-pg_isready -h db-1 -p 5432
-psql -h db-1 -U postgres -c "SELECT 1;"
+ssh -F ssh_config db-1 "sudo /usr/lib/edb-pge/17/bin/pg_isready -p 5432"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT 1;'\""
 ```
 
 **Replication**
 ```bash
-psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
-psql -h db-2 -U postgres -c "SELECT pg_is_in_recovery();"
+ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\""
+ssh -F ssh_config db-2 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT pg_is_in_recovery();'\""
 ```
 
 **Barman Backups**
 ```bash
-barman backup db-1 --wait
-barman list-backup db-1
-barman show-backup db-1 <backup-id>
-barman delete db-1 <backup-id>
+ssh -F ssh_config barman "barman backup db-1 --wait"
+ssh -F ssh_config barman "barman list-backup db-1"
+ssh -F ssh_config barman "barman show-backup db-1 <backup-id>"
+ssh -F ssh_config barman "barman delete db-1 <backup-id>"
 ```
 
 **Service Control**
 ```bash
-ssh ec2-user@db-1 "sudo systemctl {start|stop|status|restart} postgresql"
+ssh -F ssh_config db-1 "sudo systemctl {start|stop|status|restart} edb-as-17"
+ssh -F ssh_config db-2 "sudo systemctl {start|stop|status|restart} edb-as-17"
 ssh -F ssh_config barman "sudo systemctl {start|stop|status|restart} barman"
 ```
 
@@ -798,7 +801,7 @@ ssh -F ssh_config barman "sudo systemctl {start|stop|status|restart} barman"
 
 - **Last Updated**: June 6, 2026
 - **Cluster**: db-1 (primary), db-2 (replica), barman, efm-witness
-- **Platform**: Vagrant VMs
+- **Platform**: Vagrant VMs with EDB PG Enterprise 17
 - **Status**: Production-ready
 
 ---
