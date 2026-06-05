@@ -77,10 +77,22 @@ ssh -F ssh_config db-1 "psql -U postgres -c \"SELECT pg_terminate_backend(pid) F
 Verify replication is healthy:
 
 ```bash
-ssh -F ssh_config db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
+ssh -F ssh_config db-1 "psql -U postgres -c \"SELECT * FROM pg_stat_replication;\""
 ```
 
 **Expected output**: One row per replica showing `state = streaming`, zero lag.
+
+**Output Format (Table View):**
+
+| pid | usesysid | usename | application_name | client_addr | client_hostname | client_port | backend_start | state | sync_state | reply_time | flush_lsn | replay_lsn | write_lag | flush_lag | replay_lag |
+|-----|----------|---------|------------------|-------------|-----------------|-------------|---------------|-------|-----------|------------|-----------|-----------|-----------|-----------|-----------|
+| 1234 | 10 | streaming_barman | barman | 192.168.1.50 | barman | 55432 | 2026-06-05 18:20:15.123456+00 | streaming | async | 2026-06-05 18:25:00.123456+00 | 0/3000000 | 0/3000000 | 00:00:00.5 | 00:00:00.5 | 00:00:00.5 |
+
+**Key columns to monitor:**
+- **state**: Should be `streaming` (healthy) or `catchup` (replication lag)
+- **sync_state**: `async` (asynchronous) or `sync` (synchronous)
+- **client_addr**: IP of replica connecting
+- **write_lag / flush_lag / replay_lag**: Should all be < 1 second for healthy replication
 
 ---
 
@@ -394,6 +406,12 @@ Check current slots:
 psql -h db-1 -U postgres -c "SELECT * FROM pg_replication_slots;"
 ```
 
+**Expected output** (table format):
+
+| slot_name | slot_type | datoid | database | temporary | active | active_pid | restart_lsn | confirmed_flush_lsn | wal_status | remain |
+|-----------|-----------|--------|----------|-----------|--------|-----------|------------|---------------------|------------|--------|
+| backup_barman | physical | | | f | t | 1234 | 0/3000000 | | reserved | |
+
 Check barman config:
 ```bash
 grep "slot_name" /etc/barman.d/db-1.conf
@@ -431,6 +449,12 @@ Check Postgres archiver status:
 ```bash
 psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver;"
 ```
+
+**Expected output** (table format):
+
+| archived_count | last_archived_wal | last_archived_time | failed_count | last_failed_wal | last_failed_time | stats_reset |
+|---|---|---|---|---|---|---|
+| 1234 | 000000010000000000000ABC | 2026-06-05 18:25:00.123456+00 | 0 | | | |
 
 Check archive_command:
 ```bash
