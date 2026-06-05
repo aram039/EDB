@@ -70,17 +70,17 @@ Running on **Vagrant VMs** on a local laptop.
 
 Terminate non-critical connections to allow a clean shutdown:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config db-1 "psql -U postgres -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname NOT IN ('postgres', 'template0', 'template1') AND pid <> pg_backend_pid();\""
-\`\`\`
+```
 
 Verify replication is healthy:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
-\`\`\`
+```
 
-**Expected output**: One row per replica showing \`state = streaming\`, zero lag.
+**Expected output**: One row per replica showing `state = streaming`, zero lag.
 
 ---
 
@@ -88,17 +88,17 @@ ssh -F ssh_config db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
 
 On the barman host, trigger a final backup:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman backup db-1 --wait"
-\`\`\`
+```
 
 Verify success:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
-\`\`\`
+```
 
-**Expected output**: Latest backup shows \`Done\` status, recent timestamp, size > 0.
+**Expected output**: Latest backup shows `Done` status, recent timestamp, size > 0.
 
 ---
 
@@ -106,24 +106,24 @@ ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
 
 Stop the replica node first to cleanly disconnect from primary:
 
-\`\`\`bash
+```bash
 ssh ec2-user@db-2 "sudo systemctl stop postgresql"
-\`\`\`
+```
 
 Wait 2 seconds, then stop the primary:
 
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo systemctl stop postgresql"
-\`\`\`
+```
 
 Verify both stopped:
 
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo systemctl status postgresql | head -n 3"
 ssh ec2-user@db-2 "sudo systemctl status postgresql | head -n 3"
-\`\`\`
+```
 
-**Expected output**: \`inactive (dead)\` status.
+**Expected output**: `inactive (dead)` status.
 
 ---
 
@@ -131,10 +131,10 @@ ssh ec2-user@db-2 "sudo systemctl status postgresql | head -n 3"
 
 Stop WAL archiver and barman to prevent timeouts during VM shutdown:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "sudo systemctl stop barman-receive-wal@db-1"
 ssh -F ssh_config barman "sudo systemctl stop barman"
-\`\`\`
+```
 
 ---
 
@@ -142,13 +142,16 @@ ssh -F ssh_config barman "sudo systemctl stop barman"
 
 Now safe to shutdown:
 
-\`\`\`bash
+```bash
 # Graceful halt (recommended)
 vagrant halt
+```
 
-# or force shutdown (if halt times out)
+Or force shutdown (if halt times out):
+
+```bash
 vagrant destroy -f
-\`\`\`
+```
 
 ---
 
@@ -156,15 +159,15 @@ vagrant destroy -f
 
 ### Step 1: Boot Vagrant VMs
 
-\`\`\`bash
+```bash
 vagrant up
-\`\`\`
+```
 
 Wait for VMs to fully boot (~1-2 minutes):
 
-\`\`\`bash
+```bash
 vagrant status
-\`\`\`
+```
 
 ---
 
@@ -172,13 +175,13 @@ vagrant status
 
 Test connectivity:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config db-1 "echo OK"
 ssh -F ssh_config db-2 "echo OK"
 ssh -F ssh_config barman "echo OK"
-\`\`\`
+```
 
-**Expected output**: \`OK\` from each host.
+**Expected output**: `OK` from each host.
 
 ---
 
@@ -186,11 +189,11 @@ ssh -F ssh_config barman "echo OK"
 
 Start the primary:
 
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo systemctl start postgresql"
 sleep 2
 ssh ec2-user@db-1 "sudo systemctl status postgresql | head -n 3"
-\`\`\`
+```
 
 ---
 
@@ -198,20 +201,20 @@ ssh ec2-user@db-1 "sudo systemctl status postgresql | head -n 3"
 
 Start the replica:
 
-\`\`\`bash
+```bash
 ssh ec2-user@db-2 "sudo systemctl start postgresql"
 sleep 2
 ssh ec2-user@db-2 "sudo systemctl status postgresql | head -n 3"
-\`\`\`
+```
 
 ---
 
 ### Step 5: Start Barman Services
 
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "sudo systemctl start barman-receive-wal@db-1"
 ssh -F ssh_config barman "sudo systemctl start barman"
-\`\`\`
+```
 
 ---
 
@@ -219,34 +222,34 @@ ssh -F ssh_config barman "sudo systemctl start barman"
 
 Check primary is writable:
 
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SELECT pg_is_in_recovery();"
-\`\`\`
+```
 
-**Expected output**: \`false\`
+**Expected output**: `false`
 
 Check replica is replaying:
 
-\`\`\`bash
+```bash
 psql -h db-2 -U postgres -c "SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn();"
-\`\`\`
+```
 
-**Expected output**: \`true | <LSN_value>\`
+**Expected output**: `true | <LSN_value>`
 
 Check replication:
 
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
-\`\`\`
+```
 
-**Expected output**: 1+ row(s) with \`state = streaming\`.
+**Expected output**: 1+ row(s) with `state = streaming`.
 
 Check barman:
 
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman check db-1"
 ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
-\`\`\`
+```
 
 **Expected output**: All checks OK, recent backup shown.
 
@@ -256,13 +259,13 @@ ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
 
 Use this before shutdown and after startup:
 
-- [ ] \`pg_isready -h db-1 -p 5432\` returns "accepting connections"
-- [ ] \`pg_isready -h db-2 -p 5432\` returns "accepting connections"
-- [ ] \`psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"\` shows 1+ row
-- [ ] \`barman check db-1\` shows no FAILED checks
-- [ ] \`barman list-backup db-1 | head -n1\` shows recent backup
-- [ ] \`psql -h db-2 -U postgres -c "SELECT now() - pg_last_xact_replay_timestamp();"\` shows < 1 second lag
-- [ ] No errors in Postgres logs: \`tail -n 50 /var/lib/pgsql/data/log/postgresql-*.log | grep ERROR\`
+- [ ] `pg_isready -h db-1 -p 5432` returns "accepting connections"
+- [ ] `pg_isready -h db-2 -p 5432` returns "accepting connections"
+- [ ] `psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"` shows 1+ row
+- [ ] `barman check db-1` shows no FAILED checks
+- [ ] `barman list-backup db-1 | head -n1` shows recent backup
+- [ ] `psql -h db-2 -U postgres -c "SELECT now() - pg_last_xact_replay_timestamp();"` shows < 1 second lag
+- [ ] No errors in Postgres logs: `tail -n 50 /var/lib/pgsql/data/log/postgresql-*.log | grep ERROR`
 
 ---
 
@@ -271,15 +274,15 @@ Use this before shutdown and after startup:
 ### Barman Overview
 
 **barman** is a backup archiver for PostgreSQL. It:
-1. Takes base backups using \`pg_basebackup\` (streaming)
+1. Takes base backups using `pg_basebackup` (streaming)
 2. Archives WAL (write-ahead logs) for point-in-time recovery (PITR)
-3. Stores backups in \`/var/lib/barman/db-1/base/<timestamp>\`
-4. Maintains a catalog of successful backups in \`/var/lib/barman/db-1/meta\`
+3. Stores backups in `/var/lib/barman/db-1/base/<timestamp>`
+4. Maintains a catalog of successful backups in `/var/lib/barman/db-1/meta`
 
 **Backup workflow:**
-\`\`\`
+```
 Backup Start → pg_basebackup streams data → Backup label written → Backup complete → WALs continue archiving
-\`\`\`
+```
 
 ---
 
@@ -287,49 +290,53 @@ Backup Start → pg_basebackup streams data → Backup label written → Backup 
 
 #### Error Message
 
-\`\`\`
+```
 ERROR: The backup has failed copying files
 ERROR: Backup failed writing backup label.
 DETAILS: [Errno 2] No such file or directory: '/var/lib/barman/db-1/base/20260605T182103/data/backup_label'
-\`\`\`
+```
 
 #### Root Cause
 
-The \`rsync-concurrent\` backup method had a **race condition**:
-- \`rsync\` starts copying files from Postgres data directory
-- Meanwhile, \`pg_basebackup()\` runs on the Postgres primary
-- \`backup_label\` is created by \`pg_stop_backup()\`
-- But \`rsync\` may finish before \`backup_label\` is created → file not copied → barman fails
+The `rsync-concurrent` backup method had a **race condition**:
+- `rsync` starts copying files from Postgres data directory
+- Meanwhile, `pg_basebackup()` runs on the Postgres primary
+- `backup_label` is created by `pg_stop_backup()`
+- But `rsync` may finish before `backup_label` is created → file not copied → barman fails
 
 **Why it happened**: The barman config had:
-\`\`\`
+```
 backup_method = rsync-concurrent  (default, not explicit)
 reuse_backup = link               (global setting conflicting with rsync)
-\`\`\`
+```
 
 #### Solution Applied
 
-1. **Changed backup method** from \`rsync-concurrent\` to \`postgres\` (uses \`pg_basebackup\` + \`pg_receivexlog\`):
-\`\`\`bash
+1. **Changed backup method** from `rsync-concurrent` to `postgres` (uses `pg_basebackup` + `pg_receivexlog`):
+
+```bash
 sudo sed -i 's/^backup_method.*/backup_method = postgres/' /etc/barman.d/db-1.conf
-\`\`\`
+```
 
 2. **Disabled conflicting option**:
-\`\`\`bash
+
+```bash
 echo "reuse_backup = off" | sudo tee -a /etc/barman.d/db-1.conf
-\`\`\`
+```
 
 3. **Verified it worked**:
-\`\`\`bash
+
+```bash
 barman backup db-1
 # Result: SUCCESS, 31.1 MiB backup created
-\`\`\`
+```
 
 4. **Cleaned up failed backups**:
-\`\`\`bash
+
+```bash
 barman delete db-1 20260605T171903
 barman delete db-1 20260605T172403
-\`\`\`
+```
 
 ---
 
@@ -338,278 +345,280 @@ barman delete db-1 20260605T172403
 #### Issue 1: Missing backup_label in rsync backup
 
 **Symptoms**
-\`\`\`
+```
 ERROR: The backup has failed copying files
 ERROR: Backup failed writing backup label.
 DETAILS: [Errno 2] No such file or directory: '.../backup_label'
-\`\`\`
+```
 
 **How to diagnose**
 
 Check barman logs:
-\`\`\`bash
+```bash
 sudo tail -n 100 /var/log/barman/barman.log | grep -E "ERROR|backup_label"
-\`\`\`
+```
 
 Check if rsync actually ran:
-\`\`\`bash
+```bash
 ls -la /var/lib/barman/db-1/base/
 # If directories are present but empty → rsync failed/incomplete
-\`\`\`
+```
 
 Check Postgres logs for backup_label creation:
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo tail -n 50 /var/lib/pgsql/data/log/postgresql-*.log | grep -E 'pg_stop_backup|backup_label|ERROR'"
-\`\`\`
+```
 
 **How to fix**
 
-Switch to the \`postgres\` backup method (avoids rsync race):
-\`\`\`bash
+Switch to the `postgres` backup method (avoids rsync race):
+```bash
 sudo sed -i 's/backup_method.*/backup_method = postgres/' /etc/barman.d/db-1.conf
 echo "reuse_backup = off" | sudo tee -a /etc/barman.d/db-1.conf
 barman backup db-1 --wait
-\`\`\`
+```
 
 ---
 
 #### Issue 2: Replication slot missing or already exists
 
 **Symptoms**
-\`\`\`
+```
 ERROR: Replication slot 'backup_barman' already exists
-\`\`\`
+```
 
 **How to diagnose**
 
 Check current slots:
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SELECT * FROM pg_replication_slots;"
-\`\`\`
+```
 
 Check barman config:
-\`\`\`bash
+```bash
 grep "slot_name" /etc/barman.d/db-1.conf
-\`\`\`
+```
 
 **How to fix**
 
 Option A — Recreate the slot:
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SELECT pg_drop_replication_slot('backup_barman');"
 barman check db-1  # will recreate the slot
-\`\`\`
+```
 
 Option B — Use a different slot name:
-\`\`\`bash
+```bash
 sudo bash -c 'echo "slot_name = backup_barman_new" >> /etc/barman.d/db-1.conf'
 barman check db-1
-\`\`\`
+```
 
 ---
 
 #### Issue 3: WAL archiving not progressing
 
 **Symptoms**
-\`\`\`
+```
 barman check db-1 output:
   archiver errors: FAILED (WALs not being archived)
   wal size: HUGE (grows without bound)
   wal maximum age: FAILED
-\`\`\`
+```
 
 **How to diagnose**
 
 Check Postgres archiver status:
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver;"
-\`\`\`
+```
 
 Check archive_command:
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SHOW archive_command;"
-\`\`\`
+```
 
 Check barman can receive WALs:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman replication-status db-1"
-\`\`\`
+```
 
 Test SSH connectivity:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ssh postgres@db-1 'psql -U streaming_barman -c \"SELECT 1;\"'"
-\`\`\`
+```
 
 **How to fix**
 
 Ensure streaming_barman user has replication privileges:
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "ALTER ROLE streaming_barman WITH REPLICATION;"
-\`\`\`
+```
 
 Verify streaming_archiver is enabled in barman config:
-\`\`\`bash
+```bash
 grep "streaming_archiver" /etc/barman.d/db-1.conf
 # should show: streaming_archiver = on
-\`\`\`
+```
 
 Restart Postgres if needed:
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo systemctl restart postgresql"
-\`\`\`
+```
 
 Monitor archiving progress:
-\`\`\`bash
+```bash
 sleep 10
 barman check db-1
-\`\`\`
+```
 
 ---
 
 #### Issue 4: Backup stuck in WAITING_FOR_WALS state
 
 **Symptoms**
-\`\`\`
+```
 barman list-backup db-1 output:
   db-1 20260605T184225 - F - ...
   (status F = finalizing, waiting for WALs)
-\`\`\`
+```
 
 **How to diagnose**
 
 Check if WALs are still arriving:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ls -lart /var/lib/barman/db-1/incoming | tail -n 10"
-\`\`\`
+```
 
 Check if receive-wal process is running:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ps aux | grep 'pg_receivewal|barman-receive'"
-\`\`\`
+```
 
 **How to fix**
 
-Use the \`--wait\` flag to let barman wait for all WALs:
-\`\`\`bash
+Use the `--wait` flag to let barman wait for all WALs:
+```bash
 barman backup db-1 --wait
 # waits indefinitely
+```
 
-# or with timeout
+Or with timeout:
+```bash
 barman backup db-1 --wait --wait-timeout 300  # 5 minutes
-\`\`\`
+```
 
 If stuck, force WAL segment switch:
-\`\`\`bash
+```bash
 barman switch-wal --force db-1
-\`\`\`
+```
 
 ---
 
 #### Issue 5: Barman cannot access Postgres PGDATA via rsync
 
 **Symptoms**
-\`\`\`
+```
 ERROR: The backup has failed copying files
 (no specific error, rsync fails silently or hangs)
-\`\`\`
+```
 
 **How to diagnose**
 
 Test the SSH command barman uses:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ssh -q postgres@db-1 -p 22 'ls -la /var/lib/pgsql/data' | head -n 20"
-\`\`\`
+```
 
 Test rsync directly:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "rsync -avz postgres@db-1:/var/lib/pgsql/data/PG_VERSION /tmp/test"
-\`\`\`
+```
 
 Check data directory permissions on db-1:
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "ls -ld /var/lib/pgsql/data"
 # should be: drwx------ postgres postgres
-\`\`\`
+```
 
 Check barman has SSH keys:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ls -la ~/.ssh/authorized_keys ~/.ssh/id_rsa"
-\`\`\`
+```
 
 **How to fix**
 
 Ensure passwordless SSH from barman to db-1:
 
 1. On barman, generate SSH key if missing:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa || true"
-\`\`\`
+```
 
 2. Copy public key to db-1:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "cat ~/.ssh/id_rsa.pub" | ssh ec2-user@db-1 "sudo tee -a /home/postgres/.ssh/authorized_keys > /dev/null"
-\`\`\`
+```
 
 3. Fix permissions on db-1:
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo chown postgres:postgres /home/postgres/.ssh/authorized_keys && sudo chmod 600 /home/postgres/.ssh/authorized_keys"
-\`\`\`
+```
 
 4. Verify:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "ssh -q postgres@db-1 'echo OK'"
 # should output: OK
-\`\`\`
+```
 
 5. Retry backup:
-\`\`\`bash
+```bash
 barman backup db-1
-\`\`\`
+```
 
 ---
 
 #### Issue 6: Disk full on barman
 
 **Symptoms**
-\`\`\`
+```
 ERROR: Backup failed ... ENOSPC (No space left on device)
-\`\`\`
+```
 
 **How to diagnose**
 
 Check disk usage:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "df -h /var/lib/barman"
 ssh -F ssh_config barman "du -sh /var/lib/barman/db-1"
-\`\`\`
+```
 
 List failed backups:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman list-backup db-1 | grep 'FAILED\|INCOMPLETE'"
-\`\`\`
+```
 
 Check backup sizes:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman list-backup db-1 | awk '{print \$1, \$2, \$NF}'"
-\`\`\`
+```
 
 **How to fix**
 
 Delete failed/orphan backups:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman delete db-1 <backup-id>"
-\`\`\`
+```
 
 Delete oldest backups if storage exceeded:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "barman list-backup db-1 | tail -n 5 | awk '{print \$2}' | while read id; do barman delete db-1 \$id; done"
-\`\`\`
+```
 
 If persistent, expand storage:
-\`\`\`bash
+```bash
 ssh -F ssh_config barman "df -h"
 # consider adding another disk or extending current volume
-\`\`\`
+```
 
 ---
 
@@ -625,14 +634,14 @@ ssh -F ssh_config barman "df -h"
 | Reuse capability | Yes (hardlinks) | No (needs reuse_backup = off) |
 | **Recommended** | **No** | **Yes** |
 
-**Recommendation**: Use \`backup_method = postgres\` for reliability. Only use \`rsync\` if you have verified it works in your environment and need faster backups.
+**Recommendation**: Use `backup_method = postgres` for reliability. Only use `rsync` if you have verified it works in your environment and need faster backups.
 
 ---
 
 #### Configuration Best Practices
 
 **barman.conf** (global):
-\`\`\`ini
+```ini
 [barman]
 backup_method = rsync-concurrent
 reuse_backup = link
@@ -640,7 +649,7 @@ reuse_backup = link
 [db-1]  # or in /etc/barman.d/db-1.conf
 backup_method = postgres
 reuse_backup = off
-\`\`\`
+```
 
 **Why**: Override global settings per server to avoid conflicts.
 
@@ -650,21 +659,21 @@ reuse_backup = off
 
 Set automatic retention to prevent disk fill:
 
-\`\`\`bash
+```bash
 echo "retention_policy = 'RECOVERY WINDOW OF 7 DAYS'" | sudo tee -a /etc/barman.d/db-1.conf
-\`\`\`
+```
 
 Run cron to apply retention:
-\`\`\`bash
+```bash
 barman cron
-\`\`\`
+```
 
 ---
 
 ### Daily Operational Checklist
 
 **Morning (after startup):**
-\`\`\`bash
+```bash
 # 1. Cluster health
 psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
 
@@ -676,10 +685,10 @@ barman list-backup db-1 | head -n1
 
 # 4. Disk space
 df -h /var/lib/barman
-\`\`\`
+```
 
 **Evening (before shutdown):**
-\`\`\`bash
+```bash
 # 1. Take final backup
 barman backup db-1 --wait
 
@@ -691,7 +700,7 @@ psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver WHERE failed_count >
 
 # 4. Shutdown sequence
 # (follow "Shutdown Procedure" section above)
-\`\`\`
+```
 
 ---
 
@@ -700,30 +709,30 @@ psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_archiver WHERE failed_count >
 ### Essential Commands
 
 **Connectivity**
-\`\`\`bash
+```bash
 pg_isready -h db-1 -p 5432
 psql -h db-1 -U postgres -c "SELECT 1;"
-\`\`\`
+```
 
 **Replication**
-\`\`\`bash
+```bash
 psql -h db-1 -U postgres -c "SELECT * FROM pg_stat_replication;"
 psql -h db-2 -U postgres -c "SELECT pg_is_in_recovery();"
-\`\`\`
+```
 
 **Barman Backups**
-\`\`\`bash
+```bash
 barman backup db-1 --wait
 barman list-backup db-1
 barman show-backup db-1 <backup-id>
 barman delete db-1 <backup-id>
-\`\`\`
+```
 
 **Service Control**
-\`\`\`bash
+```bash
 ssh ec2-user@db-1 "sudo systemctl {start|stop|status|restart} postgresql"
 ssh -F ssh_config barman "sudo systemctl {start|stop|status|restart} barman"
-\`\`\`
+```
 
 ---
 
@@ -731,12 +740,12 @@ ssh -F ssh_config barman "sudo systemctl {start|stop|status|restart} barman"
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| \`backup_label\` missing | rsync race condition | Use \`backup_method = postgres\` |
-| \`reuse_backup\` conflict | Incompatible with postgres method | Add \`reuse_backup = off\` to server config |
-| Replication slot exists | Incomplete delete | Drop slot and recreate: \`pg_drop_replication_slot(...)\` |
-| WAL not archiving | Missing streaming_barman role or perms | Grant REPLICATION: \`ALTER ROLE streaming_barman WITH REPLICATION;\` |
-| Backup WAITING_FOR_WALS | Normal; waiting for WAL archival | Use \`--wait\` flag or \`barman switch-wal --force\` |
-| rsync fails | SSH/rsync not configured | Set up passwordless SSH, verify \`ssh postgres@db-1\` works |
+| `backup_label` missing | rsync race condition | Use `backup_method = postgres` |
+| `reuse_backup` conflict | Incompatible with postgres method | Add `reuse_backup = off` to server config |
+| Replication slot exists | Incomplete delete | Drop slot and recreate: `pg_drop_replication_slot(...)` |
+| WAL not archiving | Missing streaming_barman role or perms | Grant REPLICATION: `ALTER ROLE streaming_barman WITH REPLICATION;` |
+| Backup WAITING_FOR_WALS | Normal; waiting for WAL archival | Use `--wait` flag or `barman switch-wal --force` |
+| rsync fails | SSH/rsync not configured | Set up passwordless SSH, verify `ssh postgres@db-1` works |
 | Disk full | Backups not purged or storage exhausted | Delete old backups, expand storage |
 
 ---
