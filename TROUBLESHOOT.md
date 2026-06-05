@@ -48,6 +48,7 @@ Running on **Vagrant VMs** on a local laptop.
 - Admin access to laptop/VMs
 - Knowledge of basic PostgreSQL commands and `systemctl`
 - EDB PG Enterprise 17 installed (version may vary)
+- Barman backup server with proper user/permissions configured
 
 ---
 
@@ -102,13 +103,13 @@ ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 
 On the barman host, trigger a final backup:
 
 ```bash
-ssh -F ssh_config barman "barman backup db-1 --wait"
+ssh -F ssh_config barman "sudo -u barman barman backup db-1 --wait"
 ```
 
 Verify success:
 
 ```bash
-ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | head -n 1"
 ```
 
 **Expected output**: Latest backup shows `Done` status, recent timestamp, size > 0.
@@ -260,8 +261,8 @@ ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 
 Check barman:
 
 ```bash
-ssh -F ssh_config barman "barman check db-1"
-ssh -F ssh_config barman "barman list-backup db-1 | head -n 1"
+ssh -F ssh_config barman "sudo -u barman barman check db-1"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | head -n 1"
 ```
 
 **Expected output**: All checks OK, recent backup shown.
@@ -275,8 +276,8 @@ Use this before shutdown and after startup:
 - [ ] `ssh -F ssh_config db-1 "sudo /usr/lib/edb-pge/17/bin/pg_isready -p 5432"` returns "accepting connections"
 - [ ] `ssh -F ssh_config db-2 "sudo /usr/lib/edb-pge/17/bin/pg_isready -p 5432"` returns "accepting connections"
 - [ ] `ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\"" ` shows 1+ row
-- [ ] `ssh -F ssh_config barman "barman check db-1"` shows no FAILED checks
-- [ ] `ssh -F ssh_config barman "barman list-backup db-1 | head -n1"` shows recent backup
+- [ ] `ssh -F ssh_config barman "sudo -u barman barman check db-1"` shows no FAILED checks
+- [ ] `ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | head -n1"` shows recent backup
 - [ ] `ssh -F ssh_config db-2 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT now() - pg_last_xact_replay_timestamp();'\"" ` shows < 1 second lag
 - [ ] No errors in Postgres logs: `ssh -F ssh_config db-1 "sudo tail -n 50 /var/lib/edb-as-17/data/log/postgresql-*.log | grep ERROR"`
 
@@ -340,15 +341,15 @@ echo "reuse_backup = off" | sudo tee -a /etc/barman.d/db-1.conf
 3. **Verified it worked**:
 
 ```bash
-barman backup db-1
+ssh -F ssh_config barman "sudo -u barman barman backup db-1"
 # Result: SUCCESS, 31.1 MiB backup created
 ```
 
 4. **Cleaned up failed backups**:
 
 ```bash
-barman delete db-1 20260605T171903
-barman delete db-1 20260605T172403
+ssh -F ssh_config barman "sudo -u barman barman delete db-1 20260605T171903"
+ssh -F ssh_config barman "sudo -u barman barman delete db-1 20260605T172403"
 ```
 
 ---
@@ -368,12 +369,12 @@ DETAILS: [Errno 2] No such file or directory: '.../backup_label'
 
 Check barman logs:
 ```bash
-sudo tail -n 100 /var/log/barman/barman.log | grep -E "ERROR|backup_label"
+ssh -F ssh_config barman "sudo tail -n 100 /var/log/barman/barman.log | grep -E \"ERROR|backup_label\""
 ```
 
 Check if rsync actually ran:
 ```bash
-ls -la /var/lib/barman/db-1/base/
+ssh -F ssh_config barman "ls -la /var/lib/barman/db-1/base/"
 # If directories are present but empty → rsync failed/incomplete
 ```
 
@@ -388,7 +389,7 @@ Switch to the `postgres` backup method (avoids rsync race):
 ```bash
 sudo sed -i 's/backup_method.*/backup_method = postgres/' /etc/barman.d/db-1.conf
 echo "reuse_backup = off" | sudo tee -a /etc/barman.d/db-1.conf
-barman backup db-1 --wait
+ssh -F ssh_config barman "sudo -u barman barman backup db-1 --wait"
 ```
 
 ---
@@ -423,13 +424,13 @@ grep "slot_name" /etc/barman.d/db-1.conf
 Option A — Recreate the slot:
 ```bash
 ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT pg_drop_replication_slot('\"'\"'backup_barman'\"'\"');'\""
-ssh -F ssh_config barman "barman check db-1"
+ssh -F ssh_config barman "sudo -u barman barman check db-1"
 ```
 
 Option B — Use a different slot name:
 ```bash
 sudo bash -c 'echo "slot_name = backup_barman_new" >> /etc/barman.d/db-1.conf'
-ssh -F ssh_config barman "barman check db-1"
+ssh -F ssh_config barman "sudo -u barman barman check db-1"
 ```
 
 ---
@@ -464,7 +465,7 @@ ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 
 
 Check barman can receive WALs:
 ```bash
-ssh -F ssh_config barman "barman replication-status db-1"
+ssh -F ssh_config barman "sudo -u barman barman replication-status db-1"
 ```
 
 Test SSH connectivity:
@@ -493,7 +494,7 @@ ssh -F ssh_config db-1 "sudo systemctl restart edb-as-17"
 Monitor archiving progress:
 ```bash
 sleep 10
-ssh -F ssh_config barman "barman check db-1"
+ssh -F ssh_config barman "sudo -u barman barman check db-1"
 ```
 
 ---
@@ -523,19 +524,19 @@ ssh -F ssh_config barman "ps aux | grep 'pg_receivewal|barman-receive'"
 
 Use the `--wait` flag to let barman wait for all WALs:
 ```bash
-ssh -F ssh_config barman "barman backup db-1 --wait"
+ssh -F ssh_config barman "sudo -u barman barman backup db-1 --wait"
 # waits indefinitely
 ```
 
 Or with timeout:
 ```bash
-ssh -F ssh_config barman "barman backup db-1 --wait --wait-timeout 300"
+ssh -F ssh_config barman "sudo -u barman barman backup db-1 --wait --wait-timeout 300"
 # 5 minutes timeout
 ```
 
 If stuck, force WAL segment switch:
 ```bash
-ssh -F ssh_config barman "barman switch-wal --force db-1"
+ssh -F ssh_config barman "sudo -u barman barman switch-wal --force db-1"
 ```
 
 ---
@@ -598,7 +599,7 @@ ssh -F ssh_config barman "ssh -q postgres@db-1 'echo OK'"
 
 5. Retry backup:
 ```bash
-ssh -F ssh_config barman "barman backup db-1"
+ssh -F ssh_config barman "sudo -u barman barman backup db-1"
 ```
 
 ---
@@ -620,24 +621,24 @@ ssh -F ssh_config barman "du -sh /var/lib/barman/db-1"
 
 List failed backups:
 ```bash
-ssh -F ssh_config barman "barman list-backup db-1 | grep 'FAILED\|INCOMPLETE'"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | grep 'FAILED\|INCOMPLETE'"
 ```
 
 Check backup sizes:
 ```bash
-ssh -F ssh_config barman "barman list-backup db-1 | awk '{print \$1, \$2, \$NF}'"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | awk '{print \$1, \$2, \$NF}'"
 ```
 
 **How to fix**
 
 Delete failed/orphan backups:
 ```bash
-ssh -F ssh_config barman "barman delete db-1 <backup-id>"
+ssh -F ssh_config barman "sudo -u barman barman delete db-1 <backup-id>"
 ```
 
 Delete oldest backups if storage exceeded:
 ```bash
-ssh -F ssh_config barman "barman list-backup db-1 | tail -n 5 | awk '{print \$2}' | while read id; do barman delete db-1 \$id; done"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | tail -n 5 | awk '{print \$2}' | while read id; do sudo -u barman barman delete db-1 \$id; done"
 ```
 
 If persistent, expand storage:
@@ -691,7 +692,7 @@ echo "retention_policy = 'RECOVERY WINDOW OF 7 DAYS'" | sudo tee -a /etc/barman.
 
 Run cron to apply retention:
 ```bash
-barman cron
+ssh -F ssh_config barman "sudo -u barman barman cron"
 ```
 
 ---
@@ -704,10 +705,10 @@ barman cron
 ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_replication;'\""
 
 # 2. Barman status
-ssh -F ssh_config barman "barman check db-1"
+ssh -F ssh_config barman "sudo -u barman barman check db-1"
 
 # 3. Last backup age (should be < 24h)
-ssh -F ssh_config barman "barman list-backup db-1 | head -n1"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | head -n1"
 
 # 4. Disk space
 ssh -F ssh_config barman "df -h /var/lib/barman"
@@ -716,10 +717,10 @@ ssh -F ssh_config barman "df -h /var/lib/barman"
 **Evening (before shutdown):**
 ```bash
 # 1. Take final backup
-ssh -F ssh_config barman "barman backup db-1 --wait"
+ssh -F ssh_config barman "sudo -u barman barman backup db-1 --wait"
 
 # 2. Verify it succeeded
-ssh -F ssh_config barman "barman list-backup db-1 | head -n1"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1 | head -n1"
 
 # 3. Check no archiver errors
 ssh -F ssh_config db-1 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 'SELECT * FROM pg_stat_archiver WHERE failed_count > 0;'\""
@@ -748,10 +749,10 @@ ssh -F ssh_config db-2 "sudo su - postgres -c \"/usr/lib/edb-pge/17/bin/psql -c 
 
 **Barman Backups**
 ```bash
-ssh -F ssh_config barman "barman backup db-1 --wait"
-ssh -F ssh_config barman "barman list-backup db-1"
-ssh -F ssh_config barman "barman show-backup db-1 <backup-id>"
-ssh -F ssh_config barman "barman delete db-1 <backup-id>"
+ssh -F ssh_config barman "sudo -u barman barman backup db-1 --wait"
+ssh -F ssh_config barman "sudo -u barman barman list-backup db-1"
+ssh -F ssh_config barman "sudo -u barman barman show-backup db-1 <backup-id>"
+ssh -F ssh_config barman "sudo -u barman barman delete db-1 <backup-id>"
 ```
 
 **Service Control**
